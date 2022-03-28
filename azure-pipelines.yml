@@ -1,0 +1,122 @@
+name: A pipeline for building the rasa-for-botfront fork to be used as base rasa image
+
+resources:
+- repo: self
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+trigger:
+  branches:
+    include:
+    - main
+    - dev
+  paths:
+    exclude:
+    - README.md
+
+variables:
+  tag: 'latest'
+  isProd: $[eq(variables['Build.SourceBranch'], 'refs/heads/main')]
+  isTest: $[eq(variables['Build.SourceBranch'], 'refs/heads/dev')]
+
+  azureSubscriptionEndpointTest: tku-palveluohjain-testi-sc
+  azureSubscriptionEndpointProd: tku-palveluohjain-tuotanto-sc
+  dockerRegistryEndpointTest: tku-palveluohjain-testi-docker-sc
+  dockerRegistryEndpointProd: tku-palveluohjain-tuotanto-docker-sc
+
+stages:
+
+# RASA TESTS SHOULD BE FIXED FIRST
+
+# - stage: Test
+#   displayName: Run Rasa Actions unit tests
+#   jobs:
+#   - job: UnitTests
+#     steps:
+#     - task: UsePythonVersion@0
+#       displayName: 'Use Python 3.8'
+#       inputs:
+#         versionSpec: '3.8'
+
+#     - script: python3 -m pip install --upgrade pip setuptools wheel
+#       displayName: 'Install tools'
+
+#     - script: pip install -r test/requirements.txt
+#       displayName: 'Installing requirements'
+
+#     - script: python3 -m unittest discover -s test --verbose
+#       displayName: 'Run tests'
+
+- stage: BuildTest
+  displayName: Build and push rasa-for-botfront image for test environment
+  condition: eq(variables.isTest, true)
+  variables:
+    - group: tku-paoh-test-variable-group
+  #dependsOn: Test
+  jobs:
+  - job: Build
+    displayName: Build rasa-for-botfront image for test environment
+    steps:
+    - task: Docker@2
+      displayName: Login to ACR
+      inputs:
+        command: login
+        containerRegistry: $(dockerRegistryEndpointTest)
+
+    - task: Docker@2
+      displayName: Build an image
+      inputs:
+        command: build
+        repository: rasa_for_botfront_base
+        containerRegistry: $(dockerRegistryEndpointTest)
+        dockerfile: '$(Build.SourcesDirectory)/docker/Dockerfile.botfront'
+        buildContext: '$(Build.SourcesDirectory)'
+        tags: |
+          $(tag)
+
+    - task: Docker@2
+      displayName: Push image to the container registry
+      inputs:
+        command: push
+        repository: rasa_for_botfront_base
+        containerRegistry: $(dockerRegistryEndpointTest)
+        tags: |
+          $(tag)
+
+
+- stage: BuildProd
+  displayName: Build and push rasa-for-botfront image for prod environment
+  condition: eq(variables.isProd, true)
+  variables:
+    - group: tku-paoh-tuot-variable-group
+  #dependsOn: Test
+  jobs:
+  - job: Build
+    displayName: Build rasa-for-botfront image for prod environment
+    steps:
+    - task: Docker@2
+      displayName: Login to ACR
+      inputs:
+        command: login
+        containerRegistry: $(dockerRegistryEndpointProd)
+
+    - task: Docker@2
+      displayName: Build an image
+      inputs:
+        command: build
+        repository: rasa_for_botfront_base
+        containerRegistry: $(dockerRegistryEndpointProd)
+        dockerfile: '$(Build.SourcesDirectory)/docker/Dockerfile.botfront'
+        buildContext: '$(Build.SourcesDirectory)'
+        tags: |
+          $(tag)
+
+    - task: Docker@2
+      displayName: Push image to the container registry
+      inputs:
+        command: push
+        repository: rasa_for_botfront_base
+        containerRegistry: $(dockerRegistryEndpointProd)
+        tags: |
+          $(tag)
